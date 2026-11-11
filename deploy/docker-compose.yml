@@ -1,0 +1,64 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: mindful_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mindful_db
+      POSTGRES_USER: mindful_app
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-Secr3tMindful2026}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - internal_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mindful_app -d mindful_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: mindful_redis
+    restart: unless-stopped
+    networks:
+      - internal_net
+
+  api:
+    build:
+      context: ../api
+      dockerfile: Dockerfile
+    container_name: mindful_api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://mindful_app:${POSTGRES_PASSWORD:-Secr3tMindful2026}@db:5432/mindful_db
+      REDIS_URL: redis://redis:6379/0
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-dummy-key}
+      DATA_ENCRYPTION_KEY: ${DATA_ENCRYPTION_KEY:-dGVzdF9lbmNyeXB0aW9uX2tleV8zMl9ieXRlc19sb25nCg==}
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal_net
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: mindful_frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - api
+    networks:
+      - internal_net
+
+networks:
+  internal_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
